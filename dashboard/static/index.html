@@ -24,13 +24,24 @@
 
   <main class="container">
     <nav class="pipeline" id="pipeline" aria-label="Pipeline stages"></nav>
-    <section id="panel" class="panel" aria-live="polite"></section>
+    <section id="panel" class="panel"></section>
   </main>
+
+  <aside id="drawer" class="drawer" aria-hidden="true" aria-label="Component details">
+    <div class="drawer-head">
+      <h3 id="drawer-title">Component</h3>
+      <button class="btn icon" type="button" id="drawer-close" aria-label="Close">✕</button>
+    </div>
+    <div id="drawer-body" class="drawer-body"></div>
+  </aside>
 
   <footer class="container footer">
     <span id="poll-status">Refreshing every 5 s</span>
   </footer>
 
+  <!-- Vendored for offline use: Cytoscape.js 3.35.0 and cytoscape-dagre 4.1.0 (bundles dagre). See vendor/LICENSES.txt -->
+  <script src="/static/vendor/cytoscape-3.35.0.min.js"></script>
+  <script src="/static/vendor/cytoscape-dagre-4.1.0.min.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>
