@@ -1,0 +1,36 @@
+{
+  "source": {
+    "repository": "https://github.com/juice-shop/juice-shop",
+    "commit": "c9f99228d9d56afb5f5ca7925376292f7fa44b13",
+    "archiveSha256": "9e27ca761d9ce879fe68f57449922743dcc1dfc95efa4ffc463bd48cdcb72d7f"
+  },
+  "summary": {
+    "packages": 1682,
+    "syftPackages": 1976,
+    "declaredOnlyPackages": 0,
+    "recordedVersions": 1682,
+    "dependencyEdges": 4699,
+    "evidenceEdges": 2137,
+    "ecosystems": 2,
+    "files": 1501,
+    "sourceFiles": 855,
+    "sourceLines": 121229,
+    "dependencyFiles": 4,
+    "buildFiles": 32,
+    "importReferences": 4036,
+    "bytes": 33269818,
+    "distinctPackageIdentities": 1682,
+    "rawSyftPackageRecords": 1976,
+    "applicationPackages": 1657,
+    "workflowActions": 25,
+    "workflowFiles": 16,
+    "projectApplications": 2
+  },
+  "referenceComparison": {
+    "referencePackageRecords": 571,
+    "referenceUniqueIdentities": 532,
+    "matchingExactIdentities": 532,
+    "missingExactIdentities": 0
+  },
+  "note": "Recorded verification results. No reference SBOM, target source tree, credentials, generated report or tool binaries are bundled."
+}

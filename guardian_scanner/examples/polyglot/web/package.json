@@ -1,0 +1,1 @@
+{"name":"example-web","version":"1.0.0","dependencies":{"express":"^4.21.2"},"devDependencies":{"typescript":"^5.7.3"}}

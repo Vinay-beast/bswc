@@ -138,3 +138,38 @@ still works as a deprecated alias.
 - Clones go to `workspace/`, outputs to `outputs/` (both git-ignored). The dashboard binds to localhost, serves files from `outputs/` only, and is read-only.
 - `--build-image` is opt-in, because a Docker build runs the target's `RUN` steps (inside the build sandbox).
 - The agents never push or open pull requests, and never write to the target repository's remote.
+
+## Standalone Juice Shop scanner and graph viewer
+
+The [`guardian_scanner/`](guardian_scanner/README.md) module provides a portable
+Juice Shop scan that combines Syft, native npm SBOMs, cdxgen and read-only workflow
+metadata resolution. Its self-contained light-theme dashboard includes a full
+dependency graph, workspace filters, component inventory, workflow BOM and
+source evidence. It complements the existing agents and FastAPI dashboard.
+
+```bash
+cd guardian_scanner
+python -m pip install -r requirements.txt
+python install_syft.py
+python install_scan_tools.py
+python fetch_juice_shop.py
+python guardian.py --full --open
+```
+
+The verified scan recorded 1,657 distinct npm package/version identities and 25
+workflow action references across 16 workflows. All 532 distinct package/version
+pairs in the supplied 571-record reference were present. These are recorded scan
+results; dependency resolution can change over time. ABOM integration is included,
+with an explicit diagnostic and workflow fallback when the operating system blocks
+its executable.
+
+- [One-page project summary (PDF)](docs/guardian-project-summary.pdf)
+- [Dependency graph preview](docs/guardian-dependency-graph.png)
+- [Recorded benchmark metadata](docs/guardian-benchmark.json)
+
+Generated reports, downloaded tools, repository checkouts and local configuration
+are not committed. To run this module's tests:
+
+```bash
+python -m unittest discover -s guardian_scanner -p "test_*.py" -v
+```

@@ -1,0 +1,1 @@
+{"packages":[{"name":"monolog/monolog","version":"3.8.1","type":"library","license":["MIT"],"require":{"psr/log":"^3.0"}},{"name":"psr/log","version":"3.0.2","type":"library","license":["MIT"]}],"packages-dev":[],"content-hash":"fixture"}
