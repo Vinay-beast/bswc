@@ -8,17 +8,20 @@ Each stage is a plain function so an orchestrator can call them as tools:
     ensure_npm_lockfiles-> generate missing package-lock.json (scripts disabled)
     generate_sbom       -> Syft CycloneDX JSON
     normalize_components-> flat component list
-    run_discovery       -> all of the above, writes outputs/<app-name>/
+    classify_components -> direct/transitive and prod/dev for npm components
+    run_discovery       -> all of the above, writes outputs/<app-name>/discovery/
 """
 
 from .ingest import fetch_repo, get_repo_info, repo_name_from_url
 from .manifests import discover_manifests, ensure_npm_lockfiles
 from .pipeline import run_discovery
+from .relationships import classify_components
 from .sbom import generate_sbom, normalize_components
 from .tools import ToolError, get_tool_versions, require_tool
 
 __all__ = [
     "ToolError",
+    "classify_components",
     "discover_manifests",
     "ensure_npm_lockfiles",
     "fetch_repo",
