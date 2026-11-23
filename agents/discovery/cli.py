@@ -33,9 +33,14 @@ def print_summary(meta: dict) -> None:
         print(f"  WARNING: lockfile generation failed for {l['manifest']}: {l['error']}")
     eco = ", ".join(f"{k}={v}" for k, v in meta["components_by_ecosystem"].items())
     print(f"  components: {meta['component_count']} ({eco})")
+    rel = ", ".join(f"{k}={v}" for k, v in meta["components_by_relationship"].items())
+    scope = ", ".join(f"{k}={v}" for k, v in meta["components_by_scope"].items())
+    print(f"  relationship: {rel}")
+    print(f"  scope:        {scope}")
     print("  outputs:")
     for key, path in meta["outputs"].items():
         print(f"    {key:<11} {_rel(path)}")
+    print(f"    {'run':<11} {_rel(str(Path(meta['outputs']['status']).parents[1] / 'run.json'))}")
 
 
 def main(argv: list[str] | None = None) -> int:

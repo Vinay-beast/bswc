@@ -1,25 +1,32 @@
-"""End-to-end discovery run: clone -> manifests -> lockfiles -> SBOM -> components."""
+"""End-to-end discovery run: clone -> manifests -> lockfiles -> SBOM -> components.
+
+Writes, per docs/output-contract.md:
+    outputs/<app>/run.json
+    outputs/<app>/discovery/{status.json, sbom.cdx.json, components.json, discovery_meta.json}
+"""
 
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime, timezone
+from collections import Counter
 from pathlib import Path
 
-from .ingest import DEFAULT_WORKSPACE, PROJECT_ROOT, fetch_repo, get_repo_info, repo_name_from_url
+from agents.common import DEFAULT_OUTPUTS, AgentRun, update_run_info, write_json
+from agents.common.contract import now_iso
+
+from .ingest import DEFAULT_WORKSPACE, fetch_repo, get_repo_info, repo_name_from_url
 from .manifests import discover_manifests, ensure_npm_lockfiles
+from .relationships import classify_components
 from .sbom import generate_sbom, normalize_components
 from .tools import get_tool_versions, require_tool
 
 log = logging.getLogger(__name__)
 
-DEFAULT_OUTPUTS = PROJECT_ROOT / "outputs"
-
-
-def _write_json(path: Path, data) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n")
+AGENT = "discovery"
+STAGE = "discover"
+SBOM_FILE = "sbom.cdx.json"
+COMPONENTS_FILE = "components.json"
+META_FILE = "discovery_meta.json"
 
 
 def run_discovery(
@@ -30,19 +37,38 @@ def run_discovery(
     workspace: Path = DEFAULT_WORKSPACE,
     outputs: Path = DEFAULT_OUTPUTS,
 ) -> dict:
-    """Run every discovery stage and write artifacts to outputs/<app-name>/.
+    """Run every discovery stage and write artifacts to outputs/<app>/discovery/.
 
+    status.json is set to "running" first and to "done" or "failed" at the end.
     Returns the metadata dict (also written to discovery_meta.json).
     """
+    app_name = repo_name_from_url(repo_url)
+    update_run_info(app_name, outputs, repo_url=repo_url, ref=ref, started_at=now_iso())
+    status = AgentRun(app_name, AGENT, STAGE, outputs).start()
+    try:
+        meta = _discover(repo_url, ref, refresh, workspace, status.dir)
+    except Exception as exc:
+        status.fail(f"{type(exc).__name__}: {exc}")
+        raise
+
+    update_run_info(app_name, outputs,
+                    commit_sha=meta["repo"]["commit_sha"],
+                    commit_date=meta["repo"]["commit_date"])
+    status.add_artifact(SBOM_FILE, "sbom")
+    status.add_artifact(COMPONENTS_FILE, "json")
+    status.add_artifact(META_FILE, "json")
+    status.done(meta["summary"])
+    meta["outputs"]["status"] = str(status.path)
+    return meta
+
+
+def _discover(repo_url: str, ref: str | None, refresh: bool, workspace: Path, out_dir: Path) -> dict:
     for tool in ("git", "npm", "syft"):
         require_tool(tool)
-    started = datetime.now(timezone.utc)
-
-    app_name = repo_name_from_url(repo_url)
-    out_dir = Path(outputs) / app_name
-    sbom_path = out_dir / "sbom.cdx.json"
-    components_path = out_dir / "components.json"
-    meta_path = out_dir / "discovery_meta.json"
+    started = now_iso()
+    sbom_path = out_dir / SBOM_FILE
+    components_path = out_dir / COMPONENTS_FILE
+    meta_path = out_dir / META_FILE
 
     repo_path = fetch_repo(repo_url, ref, refresh=refresh, workspace=workspace)
     repo_info = get_repo_info(repo_path, repo_url, ref)
@@ -56,16 +82,24 @@ def run_discovery(
         m["origin"] = "generated" if m["path"] in generated else "original"
 
     generate_sbom(repo_path, sbom_path)
-    components = normalize_components(sbom_path)
-    _write_json(components_path, components)
+    components = classify_components(repo_path, normalize_components(sbom_path))
+    write_json(components_path, components)
 
-    by_ecosystem: dict[str, int] = {}
-    for c in components:
-        key = c["ecosystem"] or "unknown"
-        by_ecosystem[key] = by_ecosystem.get(key, 0) + 1
+    by_ecosystem = Counter(c["ecosystem"] or "unknown" for c in components)
+    by_relationship = Counter(c["relationship"] or "unknown" for c in components)
+    by_scope = Counter(c["scope"] or "unknown" for c in components)
+    summary = {
+        "components": len(components),
+        "direct": by_relationship.get("direct", 0),
+        "transitive": by_relationship.get("transitive", 0),
+        "ecosystems": len(by_ecosystem),
+        "manifests": sum(1 for m in manifests if m["kind"] == "manifest"),
+        "lockfiles_generated": len(generated),
+        "lockfiles_failed": sum(1 for l in lockfiles if l["status"] == "failed"),
+    }
 
     meta = {
-        "app_name": app_name,
+        "app_name": repo_info["name"],
         "repo": repo_info,
         "tool_versions": get_tool_versions(),
         "manifests": manifests,
@@ -73,15 +107,15 @@ def run_discovery(
         "generated_lockfiles": sorted(generated),
         "component_count": len(components),
         "components_by_ecosystem": dict(sorted(by_ecosystem.items())),
+        "components_by_relationship": dict(sorted(by_relationship.items())),
+        "components_by_scope": dict(sorted(by_scope.items())),
+        "summary": summary,
         "outputs": {
             "sbom": str(sbom_path),
             "components": str(components_path),
             "metadata": str(meta_path),
         },
-        "run": {
-            "started_at": started.isoformat(timespec="seconds"),
-            "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        },
+        "run": {"started_at": started, "finished_at": now_iso()},
     }
-    _write_json(meta_path, meta)
+    write_json(meta_path, meta)
     return meta
