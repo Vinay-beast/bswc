@@ -2,13 +2,31 @@
 
 Hackathon project: find, explain and fix software supply chain risk in an open-source application.
 The pipeline has five stages: **Discover → Detect → Analyze → Remediate → Validate**.
-This repository currently implements **Discover**, plus a local dashboard for its outputs.
+This repository implements **Discover** and a **Detect** stage with six specialist agents,
+a master orchestrator, Groq evidence reviews and a local dashboard.
 The reference target is OWASP Juice Shop, but the Discover stage works for any public git repository.
 
 Discover is deterministic and uses no LLM. Every fact comes from a file in the repository or
 from a named tool, and the tool's command line and version are recorded next to it.
 
-## Architecture
+## Multi-agent detection
+
+The Detect stage consumes the typed graph, source evidence and CycloneDX SBOM from
+[`guardian_scanner`](guardian_scanner/README.md). Run it from the repository root:
+
+```powershell
+python -m pip install -r requirements.txt
+python scripts/install_detection_tools.py
+python -m agents.detect --target "path/to/juice-shop" --discovery-dir "path/to/discovery-output" --output outputs/detection/juice-shop --api-key-stdin
+```
+
+The last flag prompts for the Groq key without displaying or saving it. Alternatively,
+set `GROQ_API_KEY` in the process environment. Use `--no-llm` for scanner-only results.
+Open `outputs/detection/juice-shop/dashboard.html#detection` for findings, coverage,
+agent communication and links back to affected packages in the dependency graph.
+See [the detection guide](agents/detect/README.md) for capabilities and limitations.
+
+## Discover architecture
 
 ```
                          python -m agents.discover --repo <url>

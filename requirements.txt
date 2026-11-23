@@ -10,3 +10,7 @@ uvicorn==0.54.0
 PyYAML==6.0.4                                  # workflow / compose / pnpm / yarn-berry parsing
 cyclonedx-python-lib[json-validation]==11.12.0 # CycloneDX 1.6 schema validation, SPDX license ids
 jsonschema==4.26.0                             # SPDX 2.3 schema validation
+httpx==0.28.1                                 # Groq API transport (credential stays in memory)
+cvss==3.6                                     # OSV CVSS vector scoring
+bandit==1.9.4                                 # Python source analysis
+zizmor==1.33.1                                # GitHub Actions static analysis; OS policy may block its executable
