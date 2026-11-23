@@ -12,7 +12,7 @@ First stage of the Software Supply Chain Guardian. Given a Git repository URL it
 
 | Tool    | Version used | Notes |
 |---------|--------------|-------|
-| Python  | 3.11+        | standard library only (`requirements.txt` has no packages) |
+| Python  | 3.11+        | the agent uses only the standard library (`requirements.txt` lists the dashboard's packages) |
 | git     | any recent   | |
 | Node/npm| Node 18+ / npm 9+ | used only for `--package-lock-only` |
 | Syft    | v1.18.1 (pinned) | `scripts/install_syft.sh` installs it to `~/.local/bin` |
@@ -31,15 +31,27 @@ python -m agents.discovery.cli --repo <url> --ref v17.0.0   # branch, tag or com
 python -m agents.discovery.cli --repo <url> --refresh       # delete the clone and re-clone
 ```
 
-Outputs, in `outputs/<app-name>/`:
+Outputs follow the [output contract](../../docs/output-contract.md):
 
 | File | Contents |
 |------|----------|
-| `sbom.cdx.json` | CycloneDX JSON SBOM from Syft |
-| `components.json` | `name`, `version`, `purl`, `ecosystem`, `licenses`, `locations` (source manifest/lockfile), `type`, `found_by` |
-| `discovery_meta.json` | repo URL, commit SHA, timestamps, tool versions, manifests found (each marked `original` or `generated`), npm lockfile status, component counts |
+| `outputs/<app>/run.json` | App name, repo URL, commit SHA, run started and updated times |
+| `outputs/<app>/discovery/status.json` | `running` while the agent works, then `done` or `failed`, with summary counts and the artifact list |
+| `outputs/<app>/discovery/sbom.cdx.json` | CycloneDX JSON SBOM from Syft (dev dependencies included) |
+| `outputs/<app>/discovery/components.json` | `name`, `version`, `purl`, `ecosystem`, `licenses`, `locations` (source lockfile), `relationship` (direct/transitive), `scope` (prod/dev), `type`, `found_by` |
+| `outputs/<app>/discovery/discovery_meta.json` | Repo URL, commit SHA, timestamps, tool versions, manifests found (each marked `original` or `generated`), npm lockfile status, component counts |
 
-`workspace/` and `outputs/` are git-ignored.
+`workspace/` and `outputs/` are git-ignored. To browse the results, start the dashboard
+(see [dashboard/README.md](../../dashboard/README.md)).
+
+**Direct vs transitive.** An npm component is `direct` when it is declared in the `package.json`
+next to its lockfile and is the top-level install (`node_modules/<name>`). Everything else in the
+lockfile is `transitive`. `scope` is `dev` when npm marks the lockfile entry `dev`, which means it
+is reachable only through `devDependencies`; for direct dependencies, the `package.json` section
+decides. Both fields are null for non-npm components such as GitHub Actions.
+
+**Original vs generated lockfiles.** A lockfile is `original` only if git tracks it in the target
+repo. A lockfile left over from an earlier run on a reused clone is still reported as `generated`.
 
 ## Safety
 
@@ -61,14 +73,18 @@ npm still reads the target repo's `.npmrc`, so a hostile repo could point it at 
 from pathlib import Path
 from agents.discovery import (
     fetch_repo, get_repo_info, discover_manifests,
-    ensure_npm_lockfiles, generate_sbom, normalize_components, run_discovery,
+    ensure_npm_lockfiles, generate_sbom, normalize_components, classify_components,
+    run_discovery,
 )
 
 path = fetch_repo("https://github.com/juice-shop/juice-shop")
 manifests = discover_manifests(path)
 locks = ensure_npm_lockfiles(path, manifests)
-sbom = generate_sbom(path, Path("outputs/juice-shop/sbom.cdx.json"))
-components = normalize_components(sbom)
+sbom = generate_sbom(path, Path("outputs/juice-shop/discovery/sbom.cdx.json"))
+components = classify_components(path, normalize_components(sbom))
+
+# or everything, including run.json and status.json:
+meta = run_discovery("https://github.com/juice-shop/juice-shop")
 ```
 
 A missing or failing tool raises `agents.discovery.ToolError` with a readable message.
