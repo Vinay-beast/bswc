@@ -1,0 +1,16 @@
+# Cloned target repositories
+workspace/
+
+# Generated discovery artifacts (SBOMs, component lists, metadata)
+outputs/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

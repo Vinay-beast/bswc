@@ -1,0 +1,3 @@
+# Python 3.11+
+# The discovery agent uses only the standard library.
+# External tools (not pip-installable): git, Node.js/npm, Syft (scripts/install_syft.sh).
