@@ -1,0 +1,1 @@
+{ "name": "yarnapp", "version": "1.0.0", "dependencies": { "@scope/x": "^1.0.0" } }

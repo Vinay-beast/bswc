@@ -1,0 +1,7 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": { "a": "^1.0.0", "p": "^1.0.0" },
+  "devDependencies": { "d": "^1.0.0" },
+  "optionalDependencies": { "o": "^1.0.0" }
+}

@@ -1,0 +1,20 @@
+name: PR
+on:
+  pull_request_target:
+    types: [opened]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: node:20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: some-org/some-action@v1.2.3
+      - uses: other/thing@main
+      - uses: ./.github/actions/local
+      - uses: docker://alpine:3.19
+      - run: curl -sSL https://example.com/install.sh | bash
+      - run: echo deploying
+        env:
+          TOKEN: ${{ secrets.DEPLOY_TOKEN }}
