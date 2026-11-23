@@ -1,128 +1,132 @@
 # Output contract
 
-Every agent writes its results under `outputs/<app-name>/`. The dashboard and the
-orchestrator read only these files, so an agent that follows this contract shows up
-in the dashboard without any dashboard changes.
+Every agent writes its results under `outputs/<app_id>/<agent-folder>/`. The dashboard and the
+orchestrator read only these files, so an agent that follows this contract shows up in the
+dashboard without dashboard changes.
 
-`<app-name>` is the repository name taken from the URL (`https://github.com/juice-shop/juice-shop` → `juice-shop`).
+`app_id` is `<owner>__<repo>` derived from the git URL (`https://github.com/juice-shop/juice-shop`
+→ `juice-shop__juice-shop`; a GitLab subgroup `group/sub/proj` → `group-sub__proj`), so
+`orgA/app` and `orgB/app` do not collide. The same id names the clone in `workspace/`.
 
 ## Layout
 
 ```
-outputs/<app-name>/
-├── run.json                    # one per app, shared by all agents
-├── discovery/                  # one folder per agent
-│   ├── status.json             # required in every agent folder
-│   ├── sbom.cdx.json
-│   ├── components.json
-│   └── discovery_meta.json
-└── <next-agent>/
+outputs/<app_id>/
+├── run.json                    one per app; identifies the current run
+├── source_deps/                agent "source-deps"          (stage discover)
+│   ├── status.json
+│   ├── source_meta.json  source_graph.json  tool_results.json
+│   └── raw/  syft.cdx.json  syft.spdx.json  cdxgen.cdx.json  trivy-fs.cdx.json  native/...
+├── artifacts/                  agent "artifact-inspector"   (stage discover)
+│   ├── status.json
+│   ├── dockerfile_analysis.json  ci_inventory.json  container.json
+│   └── raw/  syft-image.cdx.json  syft-image.spdx.json  trivy-image.cdx.json
+└── inventory/                  agent "inventory"            (stage discover)
     ├── status.json
-    └── ...
+    └── components.json  graph.json  paths.json  sbom.cdx.json  sbom.spdx.json  coverage.json
 ```
 
-A folder counts as an agent only if it contains `status.json`. The dashboard finds agents
-by scanning for those folders and matches each to a pipeline stage by its `stage` field.
+A folder is an agent only if it contains `status.json`. Agents are matched to pipeline stages by
+the `stage` field. When an agent starts, it deletes its own folder, so no artifact from an older
+run survives inside it. All JSON is written atomically (temp file + rename) with mode `0644`.
 
 ## `run.json`
 
-Written by the first agent of a run, and merged into (never replaced) by later agents.
+Created by the first agent of a run (source-deps, or the orchestrator). Later agents merge into it;
+they never replace it.
 
-| Field | Type | Meaning |
-|-------|------|---------|
-| `app_name` | string | Folder name under `outputs/` |
-| `repo_url` | string | Repository URL that was analysed |
-| `ref` | string? | Branch, tag or SHA requested (omitted when the default branch was used) |
-| `commit_sha` | string | Full SHA of the checked-out commit |
-| `commit_date` | ISO 8601 | Commit timestamp |
-| `started_at` | ISO 8601 | When the current run started |
-| `updated_at` | ISO 8601 | Last time any agent wrote a status update |
+| Field | Meaning |
+|---|---|
+| `app_id`, `display_name` | `juice-shop__juice-shop`, `juice-shop` |
+| `repo_url`, `owner`, `repo`, `host` | Parsed from the URL |
+| `ref`, `default_branch` | Requested ref (if any) and the remote default branch |
+| `run_id` | `<UTC yyyymmddThhmmssZ>-<short SHA>`, e.g. `20261123T110206Z-c9f9922`, shared by every agent of the run |
+| `commit_sha`, `commit_date` | The checked-out commit |
+| `started_at`, `finished_at`, `updated_at` | ISO 8601 UTC |
+| `workspace` | Local clone path |
 
-## `status.json`
-
-The same schema for every agent.
+## `status.json` (every agent)
 
 ```json
 {
-  "agent": "discovery",
+  "agent": "inventory",
   "stage": "discover",
+  "run_id": "20261123T110206Z-c9f9922",
   "state": "done",
-  "started_at": "2026-11-23T10:00:01+00:00",
-  "finished_at": "2026-11-23T10:00:40+00:00",
-  "summary": { "components": 1975, "direct": 161, "transitive": 1761 },
+  "started_at": "2026-11-23T11:05:01+00:00",
+  "finished_at": "2026-11-23T11:06:12+00:00",
+  "summary": { "components": 1655, "direct": 154, "max_depth": 10 },
+  "coverage": { "lockfile_coverage_ok": true, "unreachable_nodes": 0 },
+  "warnings": [],
   "artifacts": [
-    { "name": "sbom.cdx.json", "path": "discovery/sbom.cdx.json", "type": "sbom" }
+    { "name": "sbom.cdx.json", "path": "inventory/sbom.cdx.json", "type": "sbom", "bytes": 2952685 }
   ],
   "error": null
 }
 ```
 
-| Field | Type | Meaning |
-|-------|------|---------|
-| `agent` | string | Agent name, the same as its folder name |
-| `stage` | string | One of `discover`, `detect`, `analyze`, `remediate`, `validate` |
-| `state` | string | `pending`, `running`, `done` or `failed` |
-| `started_at` | ISO 8601 | Set when the agent starts |
-| `finished_at` | ISO 8601 or null | Set on `done` or `failed`; null while running |
-| `summary` | object | Flat key → number or string pairs that the dashboard shows as tiles |
-| `artifacts` | array | Files the agent produced (see below) |
-| `error` | string or null | Error message when `state` is `failed` |
-
-Lifecycle: the agent writes `state: "running"` when it starts, then `done` or `failed` at the end.
-Files are written atomically (temp file + rename), so a reader never sees a partial file.
-
-### Artifacts
-
 | Field | Meaning |
-|-------|---------|
-| `name` | File name, unique within the agent. Used in the API URL `/api/runs/<app>/<agent>/artifact/<name>` |
-| `path` | Path relative to `outputs/<app-name>/` |
-| `type` | `sbom`, `json`, `graph` or `report` |
+|---|---|
+| `agent` | Agent name (`source-deps`, `artifact-inspector`, `inventory`, ...) |
+| `stage` | `discover`, `detect`, `analyze`, `remediate` or `validate` |
+| `run_id` | The run this status belongs to. If it differs from `run.json`'s `run_id`, the dashboard marks the agent **Stale** |
+| `state` | `pending`, `running`, `done` or `failed`. Written as `running` at start, then `done` or `failed` |
+| `started_at`, `finished_at` | ISO 8601; `finished_at` is null while running |
+| `summary` | Flat key → number/string pairs shown as tiles |
+| `coverage` | Agent-specific completeness facts (brief; the full report is an artifact) |
+| `warnings` | Non-fatal problems: a tool failed, a resolver missing, no image found, ... |
+| `artifacts` | Files the agent produced (see below) |
+| `error` | Error message when `state` is `failed` |
 
-The dashboard serves only files listed here.
-
-### Writing status from Python
+Artifact entry: `name` (the file's basename, unique per agent, used in
+`/api/runs/<app>/<agent>/artifact/<name>`), `path` (relative to `outputs/<app_id>/`), `type`
+(`sbom`, `sbom-spdx`, `json`, `graph`, `inventory` or `report`) and `bytes`. The dashboard
+serves only files listed here.
 
 ```python
 from agents.common import AgentRun
 
-status = AgentRun(app_name, agent="detection", stage="detect").start()   # state=running
-try:
-    ...  # write files into status.dir
-    status.add_artifact("findings.json", "json")
-    status.done({"vulnerabilities": 42, "critical": 3})
-except Exception as exc:
-    status.fail(str(exc))
-    raise
+with AgentRun(app_id, "detection", "detection", "detect", run_id) as status:   # state=running
+    ...                                     # write files into status.dir
+    status.warn("feed X unavailable")
+    status.add_artifact("findings.json", "report")
+    status.done({"vulnerabilities": 42}, coverage={...})
+# an exception inside the block sets state=failed with the error and re-raises
 ```
 
-## Discovery agent artifacts
+## Key inventory formats
 
-### `components.json`
+**`inventory/components.json`**: one entry per unique purl:
 
-A list with one entry per component in the SBOM:
+```json
+{
+  "purl": "pkg:npm/qs@6.16.2", "name": "qs", "version": "6.16.2", "ecosystem": "npm",
+  "relationship": "transitive", "depth": 2, "scope": "prod",
+  "dependents_count": 2, "dependencies_count": 2,
+  "declared_in": [],
+  "occurrences": [{ "project": "project:.", "lockfile": "package-lock.json",
+                    "install_path": "node_modules/qs", "resolved": "https://registry.npmjs.org/qs/-/qs-6.16.2.tgz",
+                    "integrity": "sha512-..." }],
+  "origin": { "resolved_urls": ["https://registry.npmjs.org/qs/-/qs-6.16.2.tgz"],
+              "registry_hosts": ["registry.npmjs.org"], "flags": [] },
+  "integrity": { "present": true, "algorithms": ["sha512"], "source": "lockfile" },
+  "licenses": ["BSD-3-Clause"], "license_sources": { "syft": ["BSD-3-Clause"] },
+  "found_by": ["cdxgen", "lockfile-parser", "npm-ls", "syft", "trivy"],
+  "sources": { "syft": ["package-lock.json"] },
+  "in_container": true,
+  "reachable_from": ["project:.", "project:frontend"]
+}
+```
 
-| Field | Type | Meaning |
-|-------|------|---------|
-| `name` | string | Package name (npm scope included, e.g. `@angular/core`) |
-| `version` | string | Resolved version |
-| `purl` | string | Package URL |
-| `ecosystem` | string | purl type: `npm`, `pypi`, `maven`, `github` (GitHub Actions), ... |
-| `licenses` | string[] | SPDX IDs or expressions, if known |
-| `locations` | string[] | Manifest or lockfile the component was found in, relative to the repo root |
-| `type` | string | CycloneDX component type |
-| `found_by` | string | Syft cataloger |
-| `relationship` | `"direct"`, `"transitive"` or null | Direct means declared in the `package.json` next to the lockfile and installed at the top level |
-| `scope` | `"prod"`, `"dev"` or null | `dev` when only reachable through `devDependencies` |
+`origin.flags` can be `non-default-registry`, `git`, `tarball-url`, `file`, `link` or `insecure-http`.
+GitHub Actions nodes carry `ci: {pin_type, pin_source, publisher, ref_comment, uses}`; image-only
+packages carry `container_only` and `container_kind` (`os` / `application`).
 
-`relationship` and `scope` are null when they cannot be determined yet: non-npm ecosystems, and
-the root projects themselves. The dependency-graph step will fill these in.
+**`inventory/graph.json`**: `{roots, nodes, edges, stats}`. Edge:
+`{from, to, type: prod|dev|optional|peer|uses|contains, range, edge_source}`. `edge_source` is one
+of `lockfile-parser`, `go-mod-graph`, `pip-report`, `cdxgen`, `trivy`, `syft`, `workflow-parser`,
+`syft-image`/`trivy-image` or `location-only`.
 
-### `discovery_meta.json`
+**`inventory/paths.json`**: `{cap: 1000, roots: [...], paths: {<node>: {<root>: {shortest: [ids], count: n | "1000+"}}}}`.
 
-Contains repo info (URL, SHA, commit date, ref), tool versions, every manifest and lockfile with
-`origin: original | generated`, a per-`package.json` lockfile record (`status`, the npm command
-used, and the error if generation failed), component counts by ecosystem, relationship and scope,
-and run timestamps.
-
-A lockfile is `original` only if git tracks it in the target repo.
+**`inventory/coverage.json`**: see "Reading the coverage report" in the root README.
