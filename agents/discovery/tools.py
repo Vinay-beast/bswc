@@ -24,7 +24,14 @@ _EXTRA_BIN_DIRS = [Path.home() / ".local" / "bin"]
 
 
 class ToolError(RuntimeError):
-    """Raised when an external tool is missing or fails."""
+    """Raised when an external tool is missing or fails.
+
+    `output` holds the command's full stderr/stdout (the message keeps only the tail).
+    """
+
+    def __init__(self, message: str, output: str = ""):
+        super().__init__(message)
+        self.output = output
 
 
 def require_tool(name: str) -> str:
@@ -73,7 +80,10 @@ def run(
     if check and proc.returncode != 0:
         stderr = (proc.stderr or proc.stdout or "").strip()
         tail = "\n".join(stderr.splitlines()[-15:])
-        raise ToolError(f"Command failed (exit {proc.returncode}): {' '.join(cmd)}\n{tail}")
+        raise ToolError(
+            f"Command failed (exit {proc.returncode}): {' '.join(cmd)}\n{tail}",
+            output=f"{proc.stderr}\n{proc.stdout}",
+        )
     return proc
 
 

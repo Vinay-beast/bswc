@@ -105,15 +105,35 @@ def _has_npm_lockfile(directory: Path) -> str | None:
     return None
 
 
+def _git_tracked_files(repo_path: Path) -> set[str] | None:
+    """Paths tracked by git in the clone, or None if it is not a git checkout."""
+    try:
+        out = run(["git", "ls-files", "-z"], cwd=repo_path, timeout=60).stdout
+    except ToolError:
+        return None
+    return {p for p in out.split("\0") if p}
+
+
+def _npm_error_summary(exc: ToolError) -> str:
+    """Short, useful error text from npm output (code + first message lines)."""
+    lines = [l.strip() for l in (exc.output or str(exc)).splitlines()]
+    picked = [l for l in lines if l.startswith("npm error") and "log of this run" not in l
+              and "full report" not in l][:4]
+    return " | ".join(picked)[:500] or str(exc).splitlines()[0][:500]
+
+
 def ensure_npm_lockfiles(repo_path: Path, manifests: list[dict]) -> list[dict]:
     """Make sure every package.json has a lockfile next to it.
 
     Missing lockfiles are generated with `npm install --package-lock-only
     --ignore-scripts` (no packages are installed, no scripts are run).
+    A lockfile counts as "original" only if it is tracked by git in the target
+    repo; an untracked one left by a previous run is reported as "generated".
     Returns one record per package.json:
         {"manifest", "lockfile", "status": "original"|"generated"|"failed", ...}
     """
     repo_path = Path(repo_path)
+    tracked = _git_tracked_files(repo_path)
     results: list[dict] = []
     for m in manifests:
         if Path(m["path"]).name != "package.json":
@@ -122,11 +142,13 @@ def ensure_npm_lockfiles(repo_path: Path, manifests: list[dict]) -> list[dict]:
         rel_dir = pkg_dir.relative_to(repo_path).as_posix()
         existing = _has_npm_lockfile(pkg_dir)
         if existing:
-            results.append({
-                "manifest": m["path"],
-                "lockfile": _join(rel_dir, existing),
-                "status": "original",
-            })
+            lock_rel = _join(rel_dir, existing)
+            is_original = tracked is None or lock_rel in tracked
+            record = {"manifest": m["path"], "lockfile": lock_rel,
+                      "status": "original" if is_original else "generated"}
+            if not is_original:
+                record["note"] = "untracked lockfile reused from a previous run"
+            results.append(record)
             continue
 
         record = {"manifest": m["path"], "lockfile": _join(rel_dir, "package-lock.json")}
@@ -136,11 +158,12 @@ def ensure_npm_lockfiles(repo_path: Path, manifests: list[dict]) -> list[dict]:
             try:
                 run(cmd, cwd=pkg_dir, timeout=_NPM_TIMEOUT)
             except ToolError as exc:
-                if "ERESOLVE" not in str(exc):
+                if "ERESOLVE" not in exc.output:
                     raise
-                # Peer-dependency conflicts are common in older Angular projects.
+                # Peer-dependency conflicts are common in Angular projects.
                 cmd.append("--legacy-peer-deps")
-                log.info("Retrying with --legacy-peer-deps in %s", rel_dir or ".")
+                log.info("Peer-dependency conflict; retrying with --legacy-peer-deps in %s",
+                         rel_dir or ".")
                 run(cmd, cwd=pkg_dir, timeout=_NPM_TIMEOUT)
             if not (pkg_dir / "package-lock.json").is_file():
                 raise ToolError("npm exited successfully but no package-lock.json was written")
@@ -148,7 +171,7 @@ def ensure_npm_lockfiles(repo_path: Path, manifests: list[dict]) -> list[dict]:
         except ToolError as exc:
             log.warning("Lockfile generation failed for %s: %s", m["path"], exc)
             record.update(status="failed", lockfile=None, command=" ".join(cmd),
-                          error=str(exc).splitlines()[-1][:500])
+                          error=_npm_error_summary(exc))
         results.append(record)
     return results
 

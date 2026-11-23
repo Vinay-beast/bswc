@@ -11,7 +11,11 @@ from .tools import ToolError, run
 log = logging.getLogger(__name__)
 
 _SYFT_TIMEOUT = 900
-_SYFT_ENV = {"SYFT_CHECK_FOR_APP_UPDATE": "false"}
+_SYFT_ENV = {
+    "SYFT_CHECK_FOR_APP_UPDATE": "false",
+    # Syft skips devDependencies by default; we want them, tagged with a scope.
+    "SYFT_JAVASCRIPT_INCLUDE_DEV_DEPENDENCIES": "true",
+}
 # Don't descend into the clone's git metadata or any vendored node_modules.
 _SYFT_EXCLUDES = ["./.git", "./**/node_modules"]
 
