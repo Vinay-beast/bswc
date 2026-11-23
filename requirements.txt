@@ -1,3 +1,6 @@
 # Python 3.11+
-# The discovery agent uses only the standard library.
+# Agents use only the standard library. The dashboard needs:
+fastapi==0.165.0
+uvicorn==0.54.0
+
 # External tools (not pip-installable): git, Node.js/npm, Syft (scripts/install_syft.sh).
